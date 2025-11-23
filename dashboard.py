@@ -166,6 +166,64 @@ if not df_filtered.empty:
     st.table(df_mode)
     st.caption("Catatan: Jika terdapat lebih dari satu modus (Multimodal), semua nilai akan ditampilkan.")
     
+    # --- Penambahan Pie Chart untuk Modus ---
+    st.markdown("##### Visualisasi Frekuensi Modus (Nilai Terbanyak) ")
+    
+    pie_col1, pie_col2, pie_col3 = st.columns(3)
+    
+    # 1. Pie Chart untuk Gender (Modus Gender)
+    with pie_col1:
+        st.caption("Distribusi Gender")
+        gender_counts = df_filtered['Gender'].value_counts().reset_index()
+        gender_counts.columns = ['Gender', 'Count']
+        
+        pie_gender = alt.Chart(gender_counts).mark_arc(outerRadius=120).encode(
+            theta=alt.Theta("Count", stack=True),
+            color=alt.Color("Gender"),
+            tooltip=['Gender', 'Count']
+        ).properties(title="Distribusi Gender")
+        
+        st.altair_chart(pie_gender, use_container_width=True)
+        
+    # 2. Pie Chart untuk Matkul (Modus Mata Kuliah)
+    with pie_col2:
+        st.caption("Distribusi Mata Kuliah")
+        matkul_counts = df_filtered['Matkul'].value_counts().reset_index()
+        matkul_counts.columns = ['Matkul', 'Count']
+        
+        pie_matkul = alt.Chart(matkul_counts).mark_arc(outerRadius=120).encode(
+            theta=alt.Theta("Count", stack=True),
+            color=alt.Color("Matkul"),
+            tooltip=['Matkul', 'Count']
+        ).properties(title="Distribusi Matkul")
+        
+        st.altair_chart(pie_matkul, use_container_width=True)
+
+    # 3. Pie Chart untuk Nilai (Modus Nilai Akhir) - Hanya jika tunggal
+    with pie_col3:
+        st.caption("Frekuensi Nilai Modus (Nilai Akhir)")
+        modus_nilai = df_filtered['Nilai'].mode()
+        
+        if len(modus_nilai) == 1:
+            mode_val = modus_nilai.iloc[0]
+            mode_count = (df_filtered['Nilai'] == mode_val).sum()
+            other_count = len(df_filtered) - mode_count
+            
+            pie_data = pd.DataFrame({
+                'Category': [f'Modus ({mode_val})', 'Lainnya'],
+                'Count': [mode_count, other_count]
+            })
+            
+            pie_nilai = alt.Chart(pie_data).mark_arc(outerRadius=120).encode(
+                theta=alt.Theta("Count", stack=True),
+                color=alt.Color("Category", scale=alt.Scale(domain=[f'Modus ({mode_val})', 'Lainnya'], range=['#1f77b4', '#aec7e8'])),
+                tooltip=['Category', 'Count']
+            ).properties(title="Frekuensi Modus Nilai Akhir")
+            
+            st.altair_chart(pie_nilai, use_container_width=True)
+        else:
+            st.info("Modus Nilai Akhir tidak tunggal (Multimodal) atau tidak ditemukan. Pie Chart dilewati.")
+    
 else:
     st.warning("Tidak ada data setelah difilter, Modus tidak dapat dihitung.")
 
@@ -231,7 +289,7 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. DISTRIBUSI DATA NILAI (HISTOGRAM)
+# 5. DISTRIBUSI DATA NILAI (HISTOGRAM & LINE CHART)
 # ==============================================================================
 st.header("4. Visualisasi Distribusi Nilai (Data Filtered) 📈")
 
@@ -239,31 +297,77 @@ st.info("Visualisasi ini menunjukkan sebaran frekuensi Nilai Akhir, UTS, dan UAS
 
 # Daftar kolom nilai yang akan divisualisasikan
 nilai_cols = ['Nilai', 'UTS', 'UAS']
-color_scheme = ['#4c78a8', '#f58518', '#e4575c'] # Skema warna untuk setiap kolom
+# Tentukan warna untuk setiap kolom
+color_scheme = {
+    'Nilai': '#4c78a8', # Biru
+    'UTS': '#f58518',  # Oranye
+    'UAS': '#e4575c'   # Merah
+}
 
-# Membuat 3 kolom untuk 3 histogram
-chart_cols = st.columns(3)
+# Membuat 3 kolom untuk Histrogram dan 3 kolom untuk Line Chart
+st.subheader("Visualisasi Histogram (Bar Chart)")
+hist_cols = st.columns(3)
 
 for i, col in enumerate(nilai_cols):
-    with chart_cols[i]:
-        st.subheader(f"Distribusi {col}")
+    with hist_cols[i]:
+        st.caption(f"Histogram {col}")
         
-        # Membuat Histogram menggunakan Altair
         if not df_filtered.empty:
+            # Membuat Histogram menggunakan Altair
             chart = alt.Chart(df_filtered).mark_bar().encode(
                 # Bins untuk membuat histogram
-                x=alt.X(f'{col}', bin=True, title=f'{col} (Rentang Nilai)'),
+                x=alt.X(f'{col}', bin=alt.Bin(maxbins=15), title=f'{col} (Rentang Nilai)'),
                 # y sebagai count/frekuensi
                 y=alt.Y('count()', title='Frekuensi'),
                 tooltip=[
                     alt.Tooltip(f'{col}', bin=True, title=f'Rentang {col}'),
                     alt.Tooltip('count()', title='Jumlah Mahasiswa')
                 ],
-                color=alt.value(color_scheme[i]) # Atur warna
+                color=alt.value(color_scheme[col]) # Atur warna
             ).properties(
                 title=f'Histogram Nilai {col}'
-            ).interactive() # Tambahkan interaktivitas (zoom/pan)
+            ).interactive() 
             
             st.altair_chart(chart, use_container_width=True)
         else:
             st.warning(f"Tidak ada data untuk menampilkan Distribusi {col}!")
+
+st.markdown("---")
+st.subheader("Visualisasi Line Chart (Frequency Polygon)")
+line_cols = st.columns(3)
+
+for i, col in enumerate(nilai_cols):
+    with line_cols[i]:
+        st.caption(f"Line Chart (Frequency Polygon) {col}")
+        
+        if not df_filtered.empty:
+            # Membuat Line Chart (Frequency Polygon) menggunakan Altair
+            # Menggunakan transform_bin untuk mendapatkan nilai tengah bin
+            
+            chart_base = alt.Chart(df_filtered).transform_bin(
+                # Bins sama dengan histogram, simpan di kolom '_bin_start' dan '_bin_end'
+                # Kolom baru 'bin_start' akan berisi batas bawah bin
+                'bin_start', field=col, bin=alt.Bin(maxbins=15)
+            ).transform_aggregate(
+                # Hitung frekuensi untuk setiap bin
+                count='count()',
+                # Hitung nilai tengah bin
+                center_point='mean(bin_start)', # Menggunakan batas bawah bin sebagai proxy untuk center
+                groupby=['bin_start']
+            ).encode(
+                x=alt.X('bin_start:Q', title=f'Nilai Tengah Bin {col}'),
+                y=alt.Y('count:Q', title='Frekuensi'),
+                tooltip=[
+                    alt.Tooltip('bin_start:Q', title=f'Nilai Awal Bin'),
+                    alt.Tooltip('count:Q', title='Jumlah Mahasiswa')
+                ]
+            )
+
+            # Mark Line
+            line = chart_base.mark_line(point=True, color=color_scheme[col]).properties(
+                title=f'Line Chart (Frequency Polygon) Nilai {col}'
+            ).interactive() 
+
+            st.altair_chart(line, use_container_width=True)
+        else:
+            st.warning(f"Tidak ada data untuk menampilkan Line Chart Distribusi {col}!")
