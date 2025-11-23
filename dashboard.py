@@ -43,7 +43,7 @@ st.success(f"Data berhasil dimuat dari **{FILE_PATH}**!")
 # ==============================================================================
 # 2. PROSES DATA CLEANING
 # ==============================================================================
-st.header("1. Proses Data Cleaning dan Preprocessing 🧹")
+st.header("1. Proses Data Cleaning dan Preprocessing")
 
 # Inisialisasi DataFrame untuk cleaning
 df_cleaned = df.copy()
