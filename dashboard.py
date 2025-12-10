@@ -8,25 +8,37 @@ FILE_PATH = "dataset_ujian.csv"
 # --- Konfigurasi Halaman Streamlit ---
 st.set_page_config(layout="wide")
 
-st.title("📊 Dashboard Data Nilai Mahasiswa dari File CSV")
+st.title("📊 Dashboard Data Nilai Mahasiswa")
 st.markdown("---")
 
 # ==============================================================================
-# 1. MEMUAT DATA
+# 1. MEMUAT DATA DAN DATA CLEANING (Latar Belakang)
 # ==============================================================================
 @st.cache_data
 def load_data(path):
-    """Memuat data dari CSV dan melakukan konversi tipe data."""
+    """
+    Memuat data dari CSV, melakukan konversi tipe data, 
+    dan melakukan proses data cleaning di latar belakang.
+    """
     try:
         df = pd.read_csv(path)
         
-        # Konversi kolom 'Tanggal'
+        # --- Konversi Kolom 'Tanggal' ---
         try:
             # Asumsi format tanggal adalah Hari/Bulan/Tahun (contoh: 9/8/2023)
             df['Tanggal'] = pd.to_datetime(df['Tanggal'], format='%d/%m/%Y', errors='coerce')
         except KeyError:
-            st.warning("Kolom 'Tanggal' tidak ditemukan atau formatnya berbeda. Melewati konversi tanggal.")
+            # Melewati konversi jika kolom 'Tanggal' tidak ada
+            pass
             
+        # --- Proses Data Cleaning (Tanpa Visualisasi di Dashboard) ---
+        
+        # 1. Hapus baris di mana SEMUA kolom bernilai NULL/NaN
+        df.dropna(how='all', inplace=True)
+        
+        # 2. Hapus baris duplikat
+        df.drop_duplicates(inplace=True)
+        
         return df
         
     except FileNotFoundError:
@@ -36,59 +48,14 @@ def load_data(path):
         st.error(f"Terjadi kesalahan saat membaca file: {e}")
         st.stop()
 
+# Memuat data dan menjalankan cleaning
 df = load_data(FILE_PATH)
-st.success(f"Data berhasil dimuat dari **{FILE_PATH}**!")
-
-
-# ==============================================================================
-# 2. PROSES DATA CLEANING
-# ==============================================================================
-st.header("1. Proses Data Cleaning dan Preprocessing")
-
-# Inisialisasi DataFrame untuk cleaning
-df_cleaned = df.copy()
-
-# --- 2.1 Pengecekan Data Null Awal ---
-st.subheader("1.1 Pengecekan Data Null Awal")
-total_rows_before = len(df_cleaned)
-null_counts = df_cleaned.isnull().sum()
-st.info(f"Total baris awal: **{total_rows_before}**")
-st.dataframe(null_counts.rename('Jumlah Nilai Null'))
-
-# Hapus baris di mana SEMUA kolom bernilai NULL/NaN
-st.markdown("##### Menghapus baris yang kosong seluruhnya (dropna(how='all'))")
-df_cleaned.dropna(how='all', inplace=True)
-total_rows_after_null = len(df_cleaned)
-st.success(f"Cleaning Null Selesai! Baris terhapus: **{total_rows_before - total_rows_after_null}**.")
-st.write(f"Total baris setelah cleaning Null: **{total_rows_after_null}**")
-
-
-# --- 2.2 Pengecekan Duplikasi ---
-st.subheader("1.2 Pengecekan dan Penghapusan Data Duplikasi 🔍")
-
-duplicate_rows = df_cleaned.duplicated().sum()
-st.info(f"Total baris yang terdeteksi duplikat: **{duplicate_rows}**")
-
-if duplicate_rows > 0:
-    st.warning("Baris Duplikat Ditemukan! Menampilkan baris yang duplikat:")
-    # Tampilkan baris duplikat (keep=False menampilkan semua, termasuk yang pertama)
-    st.dataframe(df_cleaned[df_cleaned.duplicated(keep=False)])
-    
-    # Menghapus baris duplikat
-    df_cleaned.drop_duplicates(inplace=True)
-    st.success(f"**{duplicate_rows}** baris duplikat telah dihapus. Sisa baris: **{len(df_cleaned)}**.")
-else:
-    st.success("Tidak ada baris duplikat yang ditemukan dalam dataset.")
-
-# Gunakan DataFrame yang sudah bersih untuk analisis selanjutnya
-df = df_cleaned
-st.info(f"Total data akhir yang akan digunakan untuk analisis: **{len(df)}** baris.")
-st.markdown("---")
+st.success(f"Data berhasil dimuat dari **{FILE_PATH}**! Total baris setelah pembersihan: **{len(df)}**.")
 
 # ==============================================================================
-# 3. FILTER INTERAKTIF
+# 2. FILTER INTERAKTIF
 # ==============================================================================
-st.header("2. Filter Data dan Ringkasan Statistik ⚙️")
+st.header("1. Filter Data dan Ringkasan Statistik ⚙️")
 
 col1, col2, col3 = st.columns(3)
 
@@ -230,35 +197,35 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 4. KORELASI ANTAR VARIABEL (BARU)
+# 3. KORELASI ANTAR VARIABEL
 # ==============================================================================
 
-st.header("3. Korelasi Antar Variabel Numerik 🔗")
+st.header("2. Korelasi Antar Variabel Numerik 🔗")
 st.info("Korelasi menunjukkan hubungan linier antara dua variabel. Nilai mendekati +1.0 berarti korelasi positif kuat, -1.0 berarti korelasi negatif kuat, dan 0.0 berarti tidak ada korelasi.")
 
 numeric_cols = ['Nilai', 'UTS', 'UAS', 'Umur']
 
 if not df_filtered.empty and len(df_filtered) > 1:
     
-    # 4.1 Hitung Matriks Korelasi
+    # 3.1 Hitung Matriks Korelasi
     correlation_matrix = df_filtered[numeric_cols].corr().reset_index()
     correlation_matrix = correlation_matrix.rename(columns={'index': 'Variable1'})
 
     # Melt DataFrame untuk format yang kompatibel dengan Altair (Variable1, Variable2, Correlation)
     corr_long = pd.melt(correlation_matrix, 
-                        id_vars='Variable1', 
-                        value_vars=numeric_cols,
-                        var_name='Variable2', 
-                        value_name='Korelasi')
+                         id_vars='Variable1', 
+                         value_vars=numeric_cols,
+                         var_name='Variable2', 
+                         value_name='Korelasi')
 
-    # 4.2 Tampilkan Tabel Korelasi
+    # 3.2 Tampilkan Tabel Korelasi
     st.subheader("Tabel Matriks Korelasi Pearson")
     st.dataframe(
         correlation_matrix.set_index('Variable1').style.format(precision=3),
         use_container_width=True
     )
     
-    # 4.3 Visualisasi Heatmap
+    # 3.3 Visualisasi Heatmap
     st.subheader("Visualisasi Heatmap Korelasi")
     
     # Buat Heatmap Altair
@@ -266,8 +233,8 @@ if not df_filtered.empty and len(df_filtered) > 1:
         x=alt.X('Variable1:N', title='Variabel 1'),
         y=alt.Y('Variable2:N', title='Variabel 2'),
         color=alt.Color('Korelasi:Q', 
-                        scale=alt.Scale(domain=[-1, 0, 1], range='diverging', scheme='redblue'),
-                        title='Koefisien Korelasi'),
+                         scale=alt.Scale(domain=[-1, 0, 1], range='diverging', scheme='redblue'),
+                         title='Koefisien Korelasi'),
         tooltip=['Variable1', 'Variable2', alt.Tooltip('Korelasi', format='.3f')]
     ).properties(
         title='Heatmap Korelasi Antar Variabel Numerik'
@@ -289,9 +256,9 @@ else:
 st.markdown("---")
 
 # ==============================================================================
-# 5. DISTRIBUSI DATA NILAI (HISTOGRAM & LINE CHART)
+# 4. DISTRIBUSI DATA NILAI (HISTOGRAM & LINE CHART)
 # ==============================================================================
-st.header("4. Visualisasi Distribusi Nilai (Data Filtered) 📈")
+st.header("3. Visualisasi Distribusi Nilai (Data Filtered) 📈")
 
 st.info("Visualisasi ini menunjukkan sebaran frekuensi Nilai Akhir, UTS, dan UAS dari data yang telah Anda filter.")
 
@@ -371,3 +338,74 @@ for i, col in enumerate(nilai_cols):
             st.altair_chart(line, use_container_width=True)
         else:
             st.warning(f"Tidak ada data untuk menampilkan Line Chart Distribusi {col}!")
+
+
+st.markdown("---")
+
+# ==============================================================================
+# 5. ANALISIS HUBUNGAN (SCATTER PLOT) - KODE TAMBAHAN
+# ==============================================================================
+st.header("4. Analisis Hubungan (Scatter Plot) 📉")
+st.info("Pilih dua variabel numerik di bawah ini untuk melihat hubungan (korelasi) antara keduanya melalui Scatter Plot.")
+
+# Daftar kolom numerik untuk sumbu X dan Y
+numeric_cols = ['Nilai', 'UTS', 'UAS', 'Umur']
+
+if not df_filtered.empty:
+    
+    # 5.1 Seleksi Variabel
+    scatter_col1, scatter_col2 = st.columns(2)
+    
+    with scatter_col1:
+        x_var = st.selectbox(
+            "Pilih Variabel Sumbu X", 
+            options=numeric_cols, 
+            index=0 # Default ke 'Nilai'
+        )
+    
+    with scatter_col2:
+        y_var = st.selectbox(
+            "Pilih Variabel Sumbu Y", 
+            options=numeric_cols, 
+            index=2 # Default ke 'UAS'
+        )
+
+    # Pastikan variabel X dan Y berbeda untuk analisis korelasi yang valid
+    if x_var == y_var:
+        st.warning("Pilih variabel X dan Y yang berbeda untuk melihat hubungan yang bermakna.")
+    else:
+        st.subheader(f"Scatter Plot: Hubungan antara {x_var} dan {y_var}")
+        
+        # 5.2 Membuat Scatter Plot Altair
+        
+        # Base chart
+        scatter_base = alt.Chart(df_filtered).encode(
+            x=alt.X(f'{x_var}:Q', title=x_var),
+            y=alt.Y(f'{y_var}:Q', title=y_var),
+            tooltip=[x_var, y_var, 'Gender', 'Matkul']
+        ).properties(
+            title=f'{x_var} vs {y_var}'
+        ).interactive() # Memungkinkan zoom dan pan
+        
+        # Points (Diagram Pencar)
+        points = scatter_base.mark_circle(size=60).encode(
+            color='Gender:N' # Menggunakan Gender sebagai pembeda warna
+        )
+        
+        # Optional: Tambahkan Garis Trend (Linear Regression)
+        trend_line = scatter_base.mark_line(color='red', strokeDash=[5,5]).transform_regression(
+            x_var, y_var, method='linear'
+        )
+        
+        # Gabungkan Points dan Trend Line
+        final_scatter = points + trend_line
+        
+        st.altair_chart(final_scatter, use_container_width=True)
+        
+        # Menampilkan Koefisien Korelasi Pearson untuk pasangan ini
+        correlation_value = df_filtered[[x_var, y_var]].corr().loc[x_var, y_var]
+        st.info(f"Koefisien Korelasi Pearson antara **{x_var}** dan **{y_var}** adalah: **{correlation_value:.3f}**")
+
+
+else:
+    st.warning("Tidak ada data setelah difilter, Scatter Plot tidak dapat ditampilkan.")
